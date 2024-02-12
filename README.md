@@ -11,5 +11,5 @@ Create a python virtual environment, install the requirements, and download the 
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-python -c "import nltk ; nltk.download('punkt')"
+python -c "import nltk, stanza ; nltk.download('punkt') ; stanza.download('en')"
 ```

@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 
 import nltk
-from os.path import join
+import stanza
+from stanza.pipeline.core import DownloadMethod
+from os.path import exists, join, splitext
+import os
 import logging
 import re
 
@@ -13,11 +16,13 @@ def split_at(text, marker):
 def read_text(text_file, encoding='UTF-8'):
     with open(text_file, 'r', encoding=encoding) as f:
         text = f.read()
-    pre_contents, contents_onwards = split_at(text, 'Contents',)
-    contents, full_text = split_at(contents_onwards, 'About the Publisher')
-    preface, main_text = split_at(full_text, 'THE FELLOWSHIP OF THE RING')
-    main_text, indices = split_at(main_text, 'I. Poems and Songs')
-    return main_text
+    if ' '.join(text[:100].split()).startswith('THE LORD OF THE RINGS BY J.R.R. TOLKIEN'):
+        pre_contents, contents_onwards = split_at(text, 'Contents',)
+        contents, full_text = split_at(contents_onwards, 'About the Publisher')
+        preface, main_text = split_at(full_text, 'THE FELLOWSHIP OF THE RING')
+        main_text, indices = split_at(main_text, 'I. Poems and Songs')
+        return main_text
+    return text
 
 
 quote_chars_re = re.compile(r"[‘’]")
@@ -43,6 +48,37 @@ def split_quotes(sentence, in_quotation):
         if is_end:
             in_quotation = False
 
+
+utter_verbs = {"say", "ask", "answer", "declare"}
+indeterminate_speakers = {"they", "he", "she"}
+
+# don't recheck each time
+nlp = stanza.Pipeline('en', download_method=DownloadMethod.REUSE_RESOURCES)
+# TODO: consider adding coreference, to be able to work out who 'he' is when 'he said'.
+
+def determine_speaker(sentence):
+    doc = nlp(sentence)
+    for sentence in doc.sentences:
+        utterance_verb = None
+        utterance_mode = None
+        for n, word in enumerate(sentence.words):
+            if word.upos == 'VERB' and word.deprel == 'root':
+                if word.lemma in utter_verbs:
+                    utterance_verb, utterance_mode = word.id, 'nsubj'
+                    break
+                elif word.lemma == 'put':
+                    # "Hello", put in so-and-so...
+                    if n+1 < len(sentence.words) and sentence.words[n+1].lemma == 'in':
+                        utterance_verb, utterance_mode = word.id, 'obl'
+                        break
+        if utterance_verb is None:
+            continue
+        for word in sentence.words:
+            if word.head == utterance_verb and word.deprel == utterance_mode:
+                speaker = word.lemma
+                if not speaker in indeterminate_speakers:
+                    return speaker
+
 def extract_dialog(text, language="english"):
     """Finds dialog in the given text file, and extracts it to the target output directory, one file per character"""
     characters = {}
@@ -53,6 +89,7 @@ def extract_dialog(text, language="english"):
     speaker = None
     def ship_narration():
         nonlocal current_narration
+        nonlocal speaker
         if current_narration:
             narration.append(' '.join(current_narration))
             current_narration = []
@@ -65,16 +102,17 @@ def extract_dialog(text, language="english"):
 
     sentence_tokenizer = nltk.load(f"tokenizers/punkt/{language}.pickle")
     for sentence in sentence_tokenizer.tokenize(text):
-        last_start = 0
         for section, in_quotation, is_start, is_end in split_quotes(sentence, in_quotation):
             if in_quotation:
                 current_utterance.append(section)
             else:
                 current_narration.append(section)
-            if is_start:
-                ship_narration()
-            if is_end:
-                ship_quotation()
+        if current_utterance and current_narration:
+            potential_speaker = determine_speaker(sentence)
+            if potential_speaker:
+                speaker = potential_speaker
+        ship_narration()
+        ship_quotation()
     else:
         ship_narration()
         ship_quotation()
