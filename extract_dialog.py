@@ -144,11 +144,15 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('text_file', nargs='+', help="File containing text")
-    parser.add_argument('-o', '--output-dir', type=str, help="Directory to output dialogue to", required=True)
+    parser.add_argument('-o', '--output-dir', type=str, help="Directory to output dialogue to")
     parser.add_argument('-l', '--loglevel', type=str, choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], help="Log level", default='INFO')
     args = parser.parse_args()
     logging.getLogger().setLevel(args.loglevel)
     for text_file in args.text_file:
+        if not args.output_dir:
+            args.output_dir = splitext(text_file)[0]
+        if not exists(args.output_dir):
+            os.mkdir(args.output_dir)
         text = read_text(text_file)
         characters, narration = extract_dialog(text)
         save_results(characters, narration, args.output_dir)
