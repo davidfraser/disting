@@ -23,6 +23,26 @@ def read_text(text_file, encoding='UTF-8'):
 quote_chars_re = re.compile(r"[‘’]")
 resume_re = re.compile(r"[\w‘’]")
 
+def split_quotes(sentence, in_quotation):
+    last_start = 0
+    for match in list(quote_chars_re.finditer(sentence)) + [None]:
+        s = len(sentence) if match is None else match.start()
+        is_start = sentence[s:s+1] == '‘' and (s == 0 or not sentence[s-1:s].isalnum())
+        is_end = sentence[s:s+1] == '’' and not (sentence[s+1:s+2].isalnum())
+        if not (is_start or is_end) and match is not None:
+            # this wasn't a quote mark at all
+            continue
+        if is_end:
+            next_resume = list(resume_re.finditer(sentence[s+1:]))
+            s += (1 + next_resume[0].start()) if next_resume else (len(sentence)-s)
+        section = sentence[last_start:s]
+        yield section, in_quotation, is_start, is_end
+        last_start = s
+        if is_start:
+            in_quotation = True
+        if is_end:
+            in_quotation = False
+
 def extract_dialog(text, language="english"):
     """Finds dialog in the given text file, and extracts it to the target output directory, one file per character"""
     characters = {}
@@ -46,27 +66,14 @@ def extract_dialog(text, language="english"):
     sentence_tokenizer = nltk.load(f"tokenizers/punkt/{language}.pickle")
     for sentence in sentence_tokenizer.tokenize(text):
         last_start = 0
-        for match in list(quote_chars_re.finditer(sentence)) + [None]:
-            s = len(sentence) if match is None else match.start()
-            is_start = sentence[s:s+1] == '‘' and (s == 0 or not sentence[s-1:s].isalnum())
-            is_end = sentence[s:s+1] == '’' and not (sentence[s+1:s+2].isalnum())
-            if not (is_start or is_end) and match is not None:
-                # this wasn't a quote mark at all
-                continue
-            if is_end:
-                next_resume = list(resume_re.finditer(sentence[s+1:]))
-                s += (1 + next_resume[0].start()) if next_resume else (len(sentence)-s)
-            section = sentence[last_start:s]
+        for section, in_quotation, is_start, is_end in split_quotes(sentence, in_quotation):
             if in_quotation:
                 current_utterance.append(section)
             else:
                 current_narration.append(section)
-            last_start = s
             if is_start:
-                in_quotation = True
                 ship_narration()
             if is_end:
-                in_quotation = False
                 ship_quotation()
     else:
         ship_narration()
