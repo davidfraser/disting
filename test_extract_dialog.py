@@ -26,7 +26,7 @@ class TestQuotationSeparator(unittest.TestCase):
         self.assertEqual(expected_results, results)
 
     def test_split_quotes(self):
-        qs = extract_dialog.QuotationSeparator(["‘’"], {"’"}, False)
+        qs = extract_dialog.QuotationSeparator(["‘’"], {"’"}, True)
         Q, N = qs.QUOTATION, qs.NARRATIVE
         self.check_sq(qs, "No quoting here", [(N, 0, "No quoting here")])
         self.check_sq(qs, "‘Pure quotation’", [(Q, 0, "‘Pure quotation’")])
@@ -37,6 +37,16 @@ class TestQuotationSeparator(unittest.TestCase):
         # trickiest case: a ’. can be a possessive marker at the end of a sentence, or a quotation before the end of the sentence.
         self.check_sq(qs, "‘End apostrophes could be possessives’. But they don’t end quotations’.",
                       [(Q, 0, "‘End apostrophes could be possessives’. But they don’t end quotations’"),
+                       (N, 70, ".")])
+        qs = extract_dialog.QuotationSeparator(["‘’"], {"’"}, False)
+        self.check_sq(qs, "‘Pure quotation’", [(Q, 1, "Pure quotation")])
+        self.check_sq(qs, "‘Beginning quotation’ with narrative.",
+                     [(Q, 1, "Beginning quotation"), (N, 21, " with narrative.")])
+        self.check_sq(qs, "‘There’s another use for apostrophes’",
+                     [(Q, 1, "There’s another use for apostrophes")])
+        # trickiest case: a ’. can be a possessive marker at the end of a sentence, or a quotation before the end of the sentence.
+        self.check_sq(qs, "‘End apostrophes could be possessives’. But they don’t end quotations’.",
+                      [(Q, 1, "End apostrophes could be possessives’. But they don’t end quotations"),
                        (N, 70, ".")])
 
 

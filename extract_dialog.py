@@ -42,6 +42,7 @@ class QuotationSeparator(object):
         """Constructs a quotation separator with the given set of (start_char, end_char) quoting pairs
         If any of these can also be used as alternative punctuation chars, they should be in a alternative_punc iterable argument"""
         # doesn't yet include support for start or end markers that are more than one character
+        self.quoting_pairs = quoting_pairs
         self.start_to_end = {sc: ec for sc, ec in quoting_pairs}
         self.start_chars, self.end_chars = {sc for sc, ec in quoting_pairs}, {ec for sc, ec in quoting_pairs}
         self.start_chars_re = re.compile(r"[%s]" % ''.join(sorted(set(self.start_chars))))
@@ -85,6 +86,14 @@ class QuotationSeparator(object):
                 potential_kind = (self.QUESTIONABLE_SOMETHING if potential_start and potential_end else
                                   self.QUESTIONABLE_START if potential_start else self.QUESTIONABLE_END)
                 yield potential_kind, match.start(), qc
+
+    def unquote_text(self, text, in_quotation):
+        """Removes quotation marks from text and returns (start_offset, unquoted_text)"""
+        if in_quotation and not self.include_quote_marks:
+            for sc, ec in self.quoting_pairs:
+                if text.startswith(sc) and text.endswith(ec):
+                    return len(sc), text[len(sc):-len(ec)]
+        return 0, text
 
     def split_quotes(self, line):
         """Yields a sequence of (QUOTATION|NARRATIVE, pos, subline)."""
@@ -131,8 +140,9 @@ class QuotationSeparator(object):
             if in_quotation and kind == self.END:
                 pos += len(chars)
             text_till_now = line[last_pos:pos]
+            start_offset, unquoted_text = self.unquote_text(text_till_now, in_quotation)
             if pos > last_pos:
-                yield self.QUOTATION if in_quotation else self.NARRATIVE, last_pos, text_till_now
+                yield self.QUOTATION if in_quotation else self.NARRATIVE, last_pos + start_offset, unquoted_text
             if kind == self.START:
                 in_quotation = True
             elif kind == self.END:
